@@ -1,0 +1,9 @@
+.idea/
+target/
+*.iml
+.classpath
+.project
+.settings/
+*.log
+.env
+hs_err_pid*
