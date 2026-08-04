@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:landing;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;INIT=CREATE SCHEMA IF NOT EXISTS landing
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        default_schema: landing
+  sql:
+    init:
+      mode: never
+
+azure:
+  storage:
+    account-name:
+    container-name: test
+    blob-name: test.csv
+
+override-load:
+  batch-size: 100
+  job-name: OVERRIDE_LOAD

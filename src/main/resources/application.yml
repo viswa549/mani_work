@@ -1,0 +1,75 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: override-load-api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/aai}
+    username: ${DB_USERNAME:aai_user}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: landing
+        jdbc:
+          batch_size: 500
+        order_inserts: true
+        order_updates: true
+  sql:
+    init:
+      mode: never
+
+azure:
+  storage:
+    account-name: ${AZURE_STORAGE_ACCOUNT:}
+    container-name: ${AZURE_STORAGE_CONTAINER:aai-exception}
+    # Uses DefaultAzureCredential (AKS workload identity / managed identity)
+    blob-name: ${AZURE_BLOB_NAME:AAI Exception File.csv}
+    connection-string: ${AZURE_STORAGE_CONNECTION_STRING:}
+
+override-load:
+  batch-size: 500
+  job-name: OVERRIDE_LOAD
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
+
+logging:
+  level:
+    com.ecvs.overrideload: INFO
+    com.azure: WARN
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    url: jdbc:h2:mem:landing;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;INIT=CREATE SCHEMA IF NOT EXISTS landing
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  h2:
+    console:
+      enabled: true
+
+azure:
+  storage:
+    account-name: local
+    container-name: local
+    blob-name: sample.csv
