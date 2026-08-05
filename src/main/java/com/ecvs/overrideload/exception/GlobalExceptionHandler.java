@@ -1,13 +1,14 @@
 package com.ecvs.overrideload.exception;
 
-import com.ecvs.overrideload.config.OverrideLoadProperties;
-import com.ecvs.overrideload.dto.OverrideLoadResponse;
-import com.ecvs.overrideload.dto.OverrideLoadResponse.ErrorDetail;
-import lombok.RequiredArgsConstructor;
+import com.ecvs.overrideload.dto.ApiErrorResponse;
+import com.ecvs.overrideload.dto.OverrideLoadResponse.ProcessStat;
+import com.ecvs.overrideload.dto.OverrideLoadResponse.StageStatistics;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -15,58 +16,81 @@ import java.time.Instant;
 import java.util.List;
 
 @RestControllerAdvice
-@RequiredArgsConstructor
 @Slf4j
 public class GlobalExceptionHandler {
 
-    private final OverrideLoadProperties loadProperties;
-
     @ExceptionHandler(OverrideLoadException.class)
-    public ResponseEntity<OverrideLoadResponse> handleOverrideLoadException(OverrideLoadException ex) {
+    public ResponseEntity<ApiErrorResponse> handleOverrideLoadException(
+            OverrideLoadException ex, HttpServletRequest request) {
         log.error("Override load failed [{}]: {}", ex.getErrorCode(), ex.getMessage(), ex);
-        return buildErrorResponse(ex.getErrorCode(), ex.getMessage(), ex.getHttpStatus(), "FAILED");
+        return ResponseEntity.status(ex.getHttpStatus()).body(ApiErrorResponse.builder()
+                .timestamp(Instant.now())
+                .error(ex.getMessage())
+                .status(ex.getHttpStatus())
+                .path(request.getRequestURI())
+                .additionalDetails(ex.getAdditionalDetails())
+                .processStats(ex.getProcessStats())
+                .build());
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiErrorResponse> handleValidation(
+            MethodArgumentNotValidException ex, HttpServletRequest request) {
+        List<String> details = ex.getBindingResult().getFieldErrors().stream()
+                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+                .toList();
+        return ResponseEntity.badRequest().body(ApiErrorResponse.builder()
+                .timestamp(Instant.now())
+                .error("Validation failed")
+                .status(HttpStatus.BAD_REQUEST.value())
+                .path(request.getRequestURI())
+                .additionalDetails(details)
+                .processStats(List.of())
+                .build());
     }
 
     @ExceptionHandler(DataAccessException.class)
-    public ResponseEntity<OverrideLoadResponse> handleDataAccess(DataAccessException ex) {
+    public ResponseEntity<ApiErrorResponse> handleDataAccess(
+            DataAccessException ex, HttpServletRequest request) {
         log.error("Database connectivity/query failure", ex);
-        return buildErrorResponse(
-                ErrorCodes.DB_CONNECTIVITY,
-                "Database connectivity or query failure: " + ex.getMostSpecificCause().getMessage(),
-                HttpStatus.SERVICE_UNAVAILABLE.value(),
-                "FAILED");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(ApiErrorResponse.builder()
+                .timestamp(Instant.now())
+                .error("Database connectivity or query failure: " + ex.getMostSpecificCause().getMessage())
+                .status(HttpStatus.SERVICE_UNAVAILABLE.value())
+                .path(request.getRequestURI())
+                .additionalDetails(List.of(ErrorCodes.DB_CONNECTIVITY))
+                .processStats(List.of(failedLoadStat()))
+                .build());
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<OverrideLoadResponse> handleGeneric(Exception ex) {
+    public ResponseEntity<ApiErrorResponse> handleGeneric(Exception ex, HttpServletRequest request) {
         log.error("Unhandled exception during override load", ex);
-        return buildErrorResponse(
-                ErrorCodes.UNEXPECTED,
-                "Unexpected server error: " + ex.getMessage(),
-                HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                "FAILED");
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiErrorResponse.builder()
+                .timestamp(Instant.now())
+                .error("Unexpected server error: " + ex.getMessage())
+                .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+                .path(request.getRequestURI())
+                .additionalDetails(List.of(ErrorCodes.UNEXPECTED))
+                .processStats(List.of(failedLoadStat()))
+                .build());
     }
 
-    private ResponseEntity<OverrideLoadResponse> buildErrorResponse(
-            String errorCode, String description, int httpStatus, String jobStatus) {
-
-        OverrideLoadResponse body = OverrideLoadResponse.builder()
-                .jobName(loadProperties.getJobName())
-                .jobStatus(jobStatus)
-                .httpStatus(httpStatus)
-                .message(description)
-                .startedAt(Instant.now())
-                .completedAt(Instant.now())
-                .totalRecordCount(0)
-                .successCount(0)
-                .exceptionCount(1)
-                .deletedCount(0)
-                .error(List.of(ErrorDetail.builder()
-                        .errorCode(errorCode)
-                        .errorDescription(description)
-                        .build()))
+    private ProcessStat failedLoadStat() {
+        Instant now = Instant.now();
+        return ProcessStat.builder()
+                .stage("LOAD")
+                .status("FAILED")
+                .startTime(now)
+                .endTime(now)
+                .statistics(StageStatistics.builder()
+                        .totalEntitlementsProcessed(0)
+                        .totalEntitlementsSuccessful(0)
+                        .newEntitlements(null)
+                        .modifiedEntitlements(null)
+                        .deletedEntitlements(null)
+                        .totalEntitlementsFailed(0)
+                        .build())
                 .build();
-
-        return ResponseEntity.status(httpStatus).body(body);
     }
 }

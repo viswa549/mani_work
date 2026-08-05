@@ -1,6 +1,5 @@
 package com.ecvs.overrideload.service;
 
-import com.ecvs.overrideload.dto.OverrideLoadResponse.ErrorDetail;
 import com.ecvs.overrideload.entity.CisException;
 import com.ecvs.overrideload.exception.ErrorCodes;
 import lombok.Getter;
@@ -21,6 +20,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 /**
  * Parses AAI Exception File CSV headers into CisException entities.
@@ -46,10 +46,10 @@ public class AaiExceptionCsvParser {
             DateTimeFormatter.ISO_LOCAL_DATE
     };
 
-    public ParseResult parse(InputStream inputStream) throws IOException {
+    public ParseResult parse(InputStream inputStream, UUID batchId) throws IOException {
         List<CisException> records = new ArrayList<>();
-        List<ErrorDetail> errors = new ArrayList<>();
-        long total = 0;
+        List<String> errors = new ArrayList<>();
+        int total = 0;
 
         CSVFormat format = CSVFormat.DEFAULT.builder()
                 .setHeader()
@@ -66,12 +66,10 @@ public class AaiExceptionCsvParser {
                 total++;
                 long rowNumber = csvRecord.getRecordNumber() + 1; // header is row 1
                 try {
-                    records.add(mapRow(csvRecord));
+                    records.add(mapRow(csvRecord, batchId));
                 } catch (IllegalArgumentException ex) {
-                    errors.add(ErrorDetail.builder()
-                            .errorCode(ErrorCodes.CSV_ROW_INVALID)
-                            .errorDescription("Row %d: %s".formatted(rowNumber, ex.getMessage()))
-                            .build());
+                    errors.add("Row %d [%s]: %s".formatted(
+                            rowNumber, ErrorCodes.CSV_ROW_INVALID, ex.getMessage()));
                 }
             }
         }
@@ -79,16 +77,13 @@ public class AaiExceptionCsvParser {
         return new ParseResult(total, records, errors);
     }
 
-    private CisException mapRow(CSVRecord row) {
-        Short coid = parseShort(required(row, COL_COID), COL_COID);
-        Long customerNumber = parseLong(required(row, COL_CUST_NUM), COL_CUST_NUM);
-        Long linkedAccount = parseLong(optional(row, COL_LINKED_ACCOUNT), COL_LINKED_ACCOUNT);
-
+    private CisException mapRow(CSVRecord row, UUID batchId) {
         return CisException.builder()
-                .coid(coid)
-                .customerNumber(customerNumber)
+                .batchId(batchId)
+                .coid(parseShort(required(row, COL_COID), COL_COID))
+                .customerNumber(parseLong(required(row, COL_CUST_NUM), COL_CUST_NUM))
                 .linkedProductCode(trimToNull(optional(row, COL_LINKED_PROD)))
-                .linkedAccountNumber(linkedAccount)
+                .linkedAccountNumber(parseLong(optional(row, COL_LINKED_ACCOUNT), COL_LINKED_ACCOUNT))
                 .linkedSubProductCode(trimToNull(firstPresent(row, COL_LINKED_SUBPC, "AAI_LINKED_SUB")))
                 .linkedCuacCode(trimToNull(optional(row, COL_LINKED_CUAC)))
                 .excAcac(trimToNull(optional(row, COL_EXC_ACAC)))
@@ -174,11 +169,11 @@ public class AaiExceptionCsvParser {
 
     @Getter
     public static class ParseResult {
-        private final long totalRecordCount;
+        private final int totalRecordCount;
         private final List<CisException> validRecords;
-        private final List<ErrorDetail> errors;
+        private final List<String> errors;
 
-        public ParseResult(long totalRecordCount, List<CisException> validRecords, List<ErrorDetail> errors) {
+        public ParseResult(int totalRecordCount, List<CisException> validRecords, List<String> errors) {
             this.totalRecordCount = totalRecordCount;
             this.validRecords = validRecords;
             this.errors = errors;

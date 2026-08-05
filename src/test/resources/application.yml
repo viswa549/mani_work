@@ -18,8 +18,9 @@ azure:
   storage:
     account-name:
     container-name: test
-    blob-name: test.csv
+    blob-name-pattern: "%s.csv"
 
 override-load:
   batch-size: 100
+  max-error-details: 50
   job-name: OVERRIDE_LOAD

@@ -9,6 +9,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "override-load")
 public class OverrideLoadProperties {
 
-    private int batchSize = 500;
+    /** JDBC batch chunk size (500–2000 recommended for ~50k rows). */
+    private int batchSize = 1000;
+
+    /** Cap row-level errors returned in additionalDetails. */
+    private int maxErrorDetails = 50;
+
     private String jobName = "OVERRIDE_LOAD";
 }

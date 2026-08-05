@@ -30,11 +30,13 @@ azure:
     account-name: ${AZURE_STORAGE_ACCOUNT:}
     container-name: ${AZURE_STORAGE_CONTAINER:aai-exception}
     # Uses DefaultAzureCredential (AKS workload identity / managed identity)
-    blob-name: ${AZURE_BLOB_NAME:AAI Exception File.csv}
+    blob-name: ${AZURE_BLOB_NAME:}
+    blob-name-pattern: ${AZURE_BLOB_NAME_PATTERN:%s.csv}
     connection-string: ${AZURE_STORAGE_CONNECTION_STRING:}
 
 override-load:
-  batch-size: 500
+  batch-size: 1000
+  max-error-details: 50
   job-name: OVERRIDE_LOAD
 
 management:
@@ -72,4 +74,4 @@ azure:
   storage:
     account-name: local
     container-name: local
-    blob-name: sample.csv
+    blob-name-pattern: "%s.csv"

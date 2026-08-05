@@ -10,13 +10,12 @@ import com.ecvs.overrideload.exception.ErrorCodes;
 import com.ecvs.overrideload.exception.OverrideLoadException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
-import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.UUID;
 
 @Service
 @ConditionalOnBean(BlobServiceClient.class)
@@ -28,42 +27,36 @@ public class BlobStorageService implements BlobContentProvider {
     private final AzureStorageProperties storageProperties;
 
     @Override
-
-    public InputStream openBlobStream(String containerName, String blobName) {
-        String container = StringUtils.hasText(containerName)
-                ? containerName
-                : storageProperties.getContainerName();
-        String blob = StringUtils.hasText(blobName)
-                ? blobName
-                : storageProperties.getBlobName();
+    public InputStream openCsvForBatch(UUID batchId) {
+        String blobName = resolveBlobName(batchId);
+        String container = storageProperties.getContainerName();
 
         try {
             BlobContainerClient containerClient = blobServiceClient.getBlobContainerClient(container);
-            BlobClient blobClient = containerClient.getBlobClient(blob);
+            BlobClient blobClient = containerClient.getBlobClient(blobName);
 
             if (!blobClient.exists()) {
                 throw new OverrideLoadException(
                         ErrorCodes.BLOB_NOT_FOUND,
-                        "Blob not found: container=%s, blob=%s".formatted(container, blob),
+                        "Blob not found: container=%s, blob=%s".formatted(container, blobName),
                         HttpStatus.NOT_FOUND.value());
             }
 
-            log.info("Downloading blob {}/{}", container, blob);
-            byte[] content = blobClient.downloadContent().toBytes();
-            return new ByteArrayInputStream(content);
+            log.info("Streaming blob {}/{} for batchId={}", container, blobName, batchId);
+            return blobClient.openInputStream();
         } catch (OverrideLoadException ex) {
             throw ex;
         } catch (BlobStorageException ex) {
             if (ex.getStatusCode() == 404) {
                 throw new OverrideLoadException(
                         ErrorCodes.BLOB_NOT_FOUND,
-                        "Blob not found: container=%s, blob=%s".formatted(container, blob),
+                        "Blob not found: container=%s, blob=%s".formatted(container, blobName),
                         HttpStatus.NOT_FOUND.value(),
                         ex);
             }
             throw new OverrideLoadException(
                     ErrorCodes.BLOB_READ_FAILURE,
-                    "Failed to read blob %s/%s: %s".formatted(container, blob, ex.getMessage()),
+                    "Failed to read blob %s/%s: %s".formatted(container, blobName, ex.getMessage()),
                     HttpStatus.BAD_GATEWAY.value(),
                     ex);
         } catch (AzureException | IllegalArgumentException | IllegalStateException ex) {
@@ -76,7 +69,7 @@ public class BlobStorageService implements BlobContentProvider {
     }
 
     @Override
-    public String resolveBlobName(String blobName) {
-        return StringUtils.hasText(blobName) ? blobName : storageProperties.getBlobName();
+    public String resolveBlobName(UUID batchId) {
+        return storageProperties.getBlobNamePattern().formatted(batchId);
     }
 }

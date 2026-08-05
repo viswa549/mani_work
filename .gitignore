@@ -7,3 +7,6 @@ target/
 *.log
 .env
 hs_err_pid*
+
+# local design scratch (not for PR)
+design-reference/
