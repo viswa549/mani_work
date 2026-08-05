@@ -3,6 +3,8 @@ package com.ecvs.overrideload.controller;
 import com.ecvs.overrideload.config.OverrideLoadProperties;
 import com.ecvs.overrideload.dto.OverrideLoadRequest;
 import com.ecvs.overrideload.dto.OverrideLoadResponse;
+import com.ecvs.overrideload.dto.OverrideLoadResponse.ProcessStat;
+import com.ecvs.overrideload.dto.OverrideLoadResponse.StageStatistics;
 import com.ecvs.overrideload.exception.ErrorCodes;
 import com.ecvs.overrideload.exception.GlobalExceptionHandler;
 import com.ecvs.overrideload.exception.OverrideLoadException;
@@ -19,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -37,34 +40,41 @@ class OverrideLoadControllerTest {
     @MockBean
     private OverrideLoadService overrideLoadService;
 
+    private final UUID batchId = UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+
     @Test
-    void returnsReconciliationPayloadOnSuccess() throws Exception {
+    void returnsProcessStatsOnSuccess() throws Exception {
         OverrideLoadResponse response = OverrideLoadResponse.builder()
-                .jobName("OVERRIDE_LOAD")
-                .jobStatus("SUCCESS")
-                .httpStatus(200)
-                .message("Override load completed")
-                .blobName("AAI Exception File 6-26-26.csv")
-                .startedAt(Instant.parse("2026-06-26T12:00:00Z"))
-                .completedAt(Instant.parse("2026-06-26T12:00:05Z"))
-                .totalRecordCount(30397)
-                .successCount(30397)
-                .exceptionCount(0)
-                .deletedCount(100)
-                .error(List.of())
+                .batchId(batchId)
+                .currentStatus("SUCCESS")
+                .processStats(List.of(ProcessStat.builder()
+                        .stage("LOAD")
+                        .status("SUCCESS")
+                        .startTime(Instant.parse("2026-06-30T12:00:00Z"))
+                        .endTime(Instant.parse("2026-06-30T12:00:05Z"))
+                        .statistics(StageStatistics.builder()
+                                .totalEntitlementsProcessed(30397)
+                                .totalEntitlementsSuccessful(30397)
+                                .newEntitlements(30397)
+                                .modifiedEntitlements(null)
+                                .deletedEntitlements(100)
+                                .totalEntitlementsFailed(0)
+                                .build())
+                        .build()))
                 .build();
 
         when(overrideLoadService.loadOverrides(any(OverrideLoadRequest.class))).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/override-load")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
+                        .content("{\"batchId\":\"3fa85f64-5717-4562-b3fc-2c963f66afa6\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.job_status").value("SUCCESS"))
-                .andExpect(jsonPath("$.total_record_count").value(30397))
-                .andExpect(jsonPath("$.success_count").value(30397))
-                .andExpect(jsonPath("$.exception_count").value(0))
-                .andExpect(jsonPath("$.http_status").value(200));
+                .andExpect(jsonPath("$.batchId").value(batchId.toString()))
+                .andExpect(jsonPath("$.currentStatus").value("SUCCESS"))
+                .andExpect(jsonPath("$.processStats[0].stage").value("LOAD"))
+                .andExpect(jsonPath("$.processStats[0].statistics.totalEntitlementsProcessed").value(30397))
+                .andExpect(jsonPath("$.processStats[0].statistics.totalEntitlementsSuccessful").value(30397))
+                .andExpect(jsonPath("$.processStats[0].statistics.totalEntitlementsFailed").value(0));
     }
 
     @Test
@@ -77,10 +87,20 @@ class OverrideLoadControllerTest {
 
         mockMvc.perform(post("/api/v1/override-load")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"blobName\":\"missing.csv\"}"))
+                        .content("{\"batchId\":\"3fa85f64-5717-4562-b3fc-2c963f66afa6\"}"))
                 .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.job_status").value("FAILED"))
-                .andExpect(jsonPath("$.error[0].error_code").value(ErrorCodes.BLOB_CONNECTIVITY))
-                .andExpect(jsonPath("$.error[0].error_description").value("Azure Blob connectivity failure"));
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.error").value("Azure Blob connectivity failure"))
+                .andExpect(jsonPath("$.path").value("/api/v1/override-load"));
+    }
+
+    @Test
+    void returnsBadRequestWhenBatchIdMissing() throws Exception {
+        mockMvc.perform(post("/api/v1/override-load")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Validation failed"));
     }
 }

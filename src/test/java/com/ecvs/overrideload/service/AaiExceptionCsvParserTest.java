@@ -7,12 +7,14 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class AaiExceptionCsvParserTest {
 
     private AaiExceptionCsvParser parser;
+    private final UUID batchId = UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66afa6");
 
     @BeforeEach
     void setUp() {
@@ -28,13 +30,14 @@ class AaiExceptionCsvParserTest {
                 """;
 
         AaiExceptionCsvParser.ParseResult result = parser.parse(
-                new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)));
+                new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)), batchId);
 
         assertThat(result.getTotalRecordCount()).isEqualTo(2);
         assertThat(result.getErrors()).isEmpty();
         assertThat(result.getValidRecords()).hasSize(2);
 
         CisException first = result.getValidRecords().getFirst();
+        assertThat(first.getBatchId()).isEqualTo(batchId);
         assertThat(first.getCoid()).isEqualTo((short) 96);
         assertThat(first.getCustomerNumber()).isEqualTo(19116873L);
         assertThat(first.getLinkedProductCode()).isEqualTo("DDA");
@@ -56,11 +59,11 @@ class AaiExceptionCsvParserTest {
                 """;
 
         AaiExceptionCsvParser.ParseResult result = parser.parse(
-                new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)));
+                new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8)), batchId);
 
         assertThat(result.getTotalRecordCount()).isEqualTo(2);
         assertThat(result.getValidRecords()).hasSize(1);
         assertThat(result.getErrors()).hasSize(1);
-        assertThat(result.getErrors().getFirst().getErrorCode()).isEqualTo("OL-CSV-002");
+        assertThat(result.getErrors().getFirst()).contains("OL-CSV-002");
     }
 }

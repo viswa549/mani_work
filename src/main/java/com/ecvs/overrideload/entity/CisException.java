@@ -13,9 +13,11 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
 /**
- * Maps to landing.cis_exception — AAI exception override records loaded from CSV.
+ * JPA entity for landing.cis_exception — kept for other service requirements.
+ * Bulk LOAD path uses {@link com.ecvs.overrideload.repository.CisExceptionJdbcRepository}.
  */
 @Entity
 @Table(name = "cis_exception", schema = "landing")
@@ -29,6 +31,9 @@ public class CisException {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "batch_id")
+    private UUID batchId;
 
     @Column(name = "coid", nullable = false)
     private Short coid;
